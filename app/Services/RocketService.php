@@ -27,20 +27,19 @@ class RocketService
     /**
      * @throws RocketServiceFailedException
      */
-    public function getRockets(): array
+    public function getRockets($retries = 5): array
     {
+        $triedCount = 0;
+        $response = null;
         try {
-            $response = $this->httpClient->get('/rockets');
+            while ($triedCount < $retries) {
+                $response = $this->httpClient->get('rockets');
 
-            if ($response->successful()) {
-                $now = now()->toIso8601String();
+                if ($response->successful()) {
+                    return $response->json();
+                }
 
-                return collect($response->json())->map(function ($rocket) use ($now) {
-                    return [
-                        ...$rocket,
-                        'last_updated' => $now,
-                    ];
-                })->toArray();
+                $triedCount++;
             }
 
             throw new RocketServiceFailedException(__METHOD__.' failed with status code '.$response->status());
@@ -118,13 +117,19 @@ class RocketService
     /**
      * @throws RocketServiceFailedException
      */
-    public function getWeather()
+    public function getWeather($retries = 5)
     {
+        $triedCount = 0;
+        $response = null;
         try {
-            $response = $this->httpClient->get('/weather');
+            while ($triedCount < $retries) {
+                $response = $this->httpClient->get('weather');
 
-            if ($response->successful()) {
-                return $response->json();
+                if ($response->successful()) {
+                    return $response->json();
+                }
+
+                $triedCount++;
             }
 
             throw new RocketServiceFailedException(__METHOD__.' failed with status code '.$response->status());

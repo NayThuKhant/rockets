@@ -76,7 +76,11 @@
         </div>
         <div v-if="connection.status" class="text-xs bg-green-300 rounded-3xl p-1 mt-4 font-bold inline-block">Connected !</div>
         <div v-else class="text-xs bg-red-300 rounded-3xl p-1 mt-4 font-bold inline-block">Disconnected !, Please refresh your browser</div>
-        <div class="text-xs text-red-500 font-weight-lighter mt-2">Last Updated at {{ rocket.last_updated }} (UTC)</div>
+        <div
+            v-if="rocket.last_updated"
+            class="text-xs text-red-500 font-weight-lighter mt-2">
+            Last Updated at {{ rocket.last_updated }} (UTC)
+        </div>
     </div>
 </template>
 
