@@ -180,7 +180,7 @@ class ListenTelemetry extends Command
             $this->isOverAllowedMemory = true;
             $this->info('Memory usage is above allowed memory: '.($memoryUsage / 1024 / 1024).' MB and the command will close all connections');
             $this->closeAllConnections();
-            exit(99); // Special exit code for memory limit exceeded
+            exit();
         }
     }
 
