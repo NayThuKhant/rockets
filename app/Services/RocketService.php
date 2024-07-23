@@ -3,10 +3,12 @@
 namespace App\Services;
 
 use App\Exceptions\InvalidActionOnRocketException;
+use App\Exceptions\RocketNotFoundException;
 use App\Exceptions\RocketServiceFailedException;
 use App\Exceptions\RocketStatusNotUpdatedException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -22,48 +24,22 @@ class RocketService
         $this->httpClient = Http::baseUrl(config('rocket.base_uri'))
             ->withHeaders([
                 'X-API-KEY' => config('rocket.api_key'),
-            ]);
+            ])->retry(5, 0, function ($exception) {
+                // If the exception is a RequestException and the status code is 503, retry the request
+                return $exception instanceof RequestException && $exception->getCode() === Response::HTTP_SERVICE_UNAVAILABLE;
+            }, false);
     }
 
-    /**
-     * Handles API request and retries if necessary.
-     *
-     * @throws RocketServiceFailedException
-     */
-    private function handleRequestWithRetires(callable $request, int $retries = 5): array
-    {
-        $triedCount = 0;
-        $response = null;
-        while ($triedCount < $retries) {
-            try {
-                $response = $request();
-                if ($response->successful()) {
-                    return $response->json();
-                }
-
-                if ($response->status() !== Response::HTTP_SERVICE_UNAVAILABLE) {
-                    // Cancel retries if the response is not 503
-                    break;
-                }
-
-                $triedCount++;
-            } catch (ConnectionException $exception) {
-                throw new RocketServiceFailedException(__METHOD__.' failed with error '.$exception->getMessage());
-            }
-        }
-
-        // If the retries count is greater than the given, or we receive other response codes
-        throw new RocketServiceFailedException(__METHOD__.' failed with status code '.$response->status());
-    }
 
     /**
-     * Handles rocket status update requests (Without retries)
+     * Handles rocket status update requests
      *
      * @throws RocketServiceFailedException
      * @throws RocketStatusNotUpdatedException
      * @throws InvalidActionOnRocketException
+     * @throws RocketNotFoundException
      */
-    private function updateRocketStatus(callable $request, string $errorMessageOnUnmodifiedAndInvalid): array
+    private function handleHttpRequest(callable $request): array
     {
         try {
             $response = $request();
@@ -71,29 +47,63 @@ class RocketService
             if ($response->successful()) {
                 return $response->json();
             } elseif ($response->status() === Response::HTTP_NOT_MODIFIED) {
-                throw new RocketStatusNotUpdatedException($errorMessageOnUnmodifiedAndInvalid);
+                throw new RocketStatusNotUpdatedException("Rocket status is not updated");
             } elseif ($response->badRequest()) {
-                throw new InvalidActionOnRocketException($errorMessageOnUnmodifiedAndInvalid);
+                throw new InvalidActionOnRocketException($response->json()["message"]);
+            } else if ($response->notFound()) {
+                throw new RocketNotFoundException("Rocket not found");
             }
 
-            throw new RocketServiceFailedException(__METHOD__.' failed with status code '.$response->status());
+            throw new RocketServiceFailedException("Request to Rocket Core Server failed with status code " . $response->status());
         } catch (ConnectionException $exception) {
-            throw new RocketServiceFailedException(__METHOD__.' failed with error '.$exception->getMessage());
+            throw new RocketServiceFailedException($exception->getMessage());
         }
     }
 
+
+    /**
+     * @throws InvalidActionOnRocketException
+     * @throws RocketStatusNotUpdatedException
+     * @throws RocketServiceFailedException
+     * @throws RocketNotFoundException
+     */
+    public function getRockets(): array
+    {
+        return $this->handleHttpRequest(
+            function () {
+                return $this->httpClient->get('rockets');
+            },
+        );
+    }
+
+    /**
+     * @throws RocketStatusNotUpdatedException
+     * @throws InvalidActionOnRocketException
+     * @throws RocketServiceFailedException
+     * @throws RocketNotFoundException
+     */
+    public function getWeather(): array
+    {
+        return $this->handleHttpRequest(
+            function () {
+                return $this->httpClient->get('weather');
+            },
+        );
+    }
+
+
     /**
      * @throws RocketServiceFailedException
      * @throws RocketStatusNotUpdatedException
      * @throws InvalidActionOnRocketException
+     * @throws RocketNotFoundException
      */
     public function launchRocket(string $rocketId): array
     {
-        return $this->updateRocketStatus(
+        return $this->handleHttpRequest(
             function () use ($rocketId) {
                 return $this->httpClient->put("rocket/$rocketId/status/launched");
             },
-            "Rocket with given id $rocketId is already launched"
         );
     }
 
@@ -101,14 +111,14 @@ class RocketService
      * @throws RocketServiceFailedException
      * @throws RocketStatusNotUpdatedException
      * @throws InvalidActionOnRocketException
+     * @throws RocketNotFoundException
      */
     public function deployRocket(string $rocketId): array
     {
-        return $this->updateRocketStatus(
+        return $this->handleHttpRequest(
             function () use ($rocketId) {
                 return $this->httpClient->put("rocket/$rocketId/status/deployed");
             },
-            "Rocket with given id $rocketId is already deployed"
         );
     }
 
@@ -116,34 +126,14 @@ class RocketService
      * @throws InvalidActionOnRocketException
      * @throws RocketServiceFailedException
      * @throws RocketStatusNotUpdatedException
+     * @throws RocketNotFoundException
      */
     public function cancelRocket(string $rocketId): array
     {
-        return $this->updateRocketStatus(
+        return $this->handleHttpRequest(
             function () use ($rocketId) {
                 return $this->httpClient->delete("rocket/$rocketId/status/launched");
             },
-            "Rocket with given id $rocketId is not launched yet"
         );
-    }
-
-    /**
-     * @throws RocketServiceFailedException
-     */
-    public function getRockets($retries = 5): array
-    {
-        return $this->handleRequestWithRetires(function () {
-            return $this->httpClient->get('rockets');
-        }, $retries);
-    }
-
-    /**
-     * @throws RocketServiceFailedException
-     */
-    public function getWeather($retries = 5): array
-    {
-        return $this->handleRequestWithRetires(function () {
-            return $this->httpClient->get('weather');
-        }, $retries);
     }
 }

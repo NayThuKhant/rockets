@@ -2,16 +2,20 @@
 
 namespace App\Facades;
 
+use App\Exceptions\InvalidActionOnRocketException;
+use App\Exceptions\RocketNotFoundException;
+use App\Exceptions\RocketServiceFailedException;
+use App\Exceptions\RocketStatusNotUpdatedException;
 use Illuminate\Support\Facades\Facade;
 
 /**
  * @see \App\Services\RocketService
  *
- * @method static array getRockets(int $retries = 5)
+ * @method static array getWeather()
+ * @method static array getRockets()
  * @method static array launchRocket(string $rocketId)
  * @method static array deployRocket(string $rocketId)
  * @method static array cancelRocket(string $rocketId)
- * @method static array getWeather(int $retries = 5)
  */
 class RocketService extends Facade
 {
