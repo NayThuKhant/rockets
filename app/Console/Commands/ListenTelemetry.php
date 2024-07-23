@@ -107,20 +107,17 @@ class ListenTelemetry extends Command
         }
 
         $data = unpack('CstartByte/a10rocketID/CpacketNumber/CpacketSize/faltitude/fspeed/facceleration/fthrust/ftemperature/ncrc16/Cdelimiter', $packet);
+        $calculatedCRC = $this->calculateCRC16(substr($packet, 0, 0x21));
 
-        if ($this->isValidPacket($data, $packet)) {
+        if ($this->isValidPacket($data, $calculatedCRC)) {
             RocketInformationUpdated::dispatch($this->mapPacketData($data));
         } else {
-            Log::error('Received invalid packet from Telemetry Server');
-            Log::error(implode(', ', $data));
+            Log::error("Received invalid packet from Telemetry Server",  [...$data, "calculated_crc" => $calculatedCRC]);
         }
     }
 
-    private function isValidPacket(array $data, string $packet): bool
+    private function isValidPacket(array $data, int $calculatedCRC): bool
     {
-        $crcData = substr($packet, 0, 0x21);
-        $calculatedCRC = $this->calculateCRC16($crcData);
-
         return $data['startByte'] === 0x82
             && $data['packetNumber'] > 0 && $data['packetNumber'] <= 0xFF
             && $this->isValidFloat($data['altitude'])
