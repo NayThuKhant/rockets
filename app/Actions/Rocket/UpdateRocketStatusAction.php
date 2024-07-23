@@ -15,7 +15,7 @@ class UpdateRocketStatusAction
     /**
      * Handles the update of rocket status.
      *
-     * @param int $rocketId
+     * @param string $rocketId
      * @param RocketStatusEnum $rocketStatus
      *
      * @return array
@@ -23,7 +23,7 @@ class UpdateRocketStatusAction
      * @throws RocketNotFoundException
      * @throws Throwable
      */
-    public static function handle(int $rocketId, RocketStatusEnum $rocketStatus): array
+    public static function handle(string $rocketId, RocketStatusEnum $rocketStatus): array
     {
         $rockets = RocketService::getRockets();
         $rocket = collect($rockets)->firstWhere('id', $rocketId);
