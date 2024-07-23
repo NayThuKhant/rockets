@@ -53,6 +53,9 @@ class UpdateRocketStatusAction
         } catch (RocketStatusNotUpdatedException $exception) {
             // When there is an invalid action on rocket, the response should be original rocket value
             // This is optional, and to provide smooth user experience and to mention that resource has an update that is not applied yet
+
+            // We may also add some flag to mention that the server is updated
+            // I don't use 304 here, just to make sure that the client receives the updates from server
             $updatedRocket = $rocket;
         }
 
