@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Exceptions\InvalidActionOnRocketException;
 use App\Exceptions\RocketServiceFailedException;
 use App\Exceptions\RocketStatusNotUpdatedException;
-
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
@@ -49,12 +48,12 @@ class RocketService
 
                 $triedCount++;
             } catch (ConnectionException $exception) {
-                throw new RocketServiceFailedException(__METHOD__ . ' failed with error ' . $exception->getMessage());
+                throw new RocketServiceFailedException(__METHOD__.' failed with error '.$exception->getMessage());
             }
         }
 
         // If the retries count is greater than the given, or we receive other response codes
-        throw new RocketServiceFailedException(__METHOD__ . ' failed with status code ' . $response->status());
+        throw new RocketServiceFailedException(__METHOD__.' failed with status code '.$response->status());
     }
 
     /**
@@ -77,21 +76,21 @@ class RocketService
                 throw new InvalidActionOnRocketException($errorMessageOnUnmodifiedAndInvalid);
             }
 
-            throw new RocketServiceFailedException(__METHOD__ . ' failed with status code ' . $response->status());
+            throw new RocketServiceFailedException(__METHOD__.' failed with status code '.$response->status());
         } catch (ConnectionException $exception) {
-            throw new RocketServiceFailedException(__METHOD__ . ' failed with error ' . $exception->getMessage());
+            throw new RocketServiceFailedException(__METHOD__.' failed with error '.$exception->getMessage());
         }
     }
 
     /**
      * @throws RocketServiceFailedException
      * @throws RocketStatusNotUpdatedException
-     * @throws  InvalidActionOnRocketException
+     * @throws InvalidActionOnRocketException
      */
     public function launchRocket(string $rocketId): array
     {
         return $this->updateRocketStatus(
-            function() use ($rocketId) {
+            function () use ($rocketId) {
                 return $this->httpClient->put("rocket/$rocketId/status/launched");
             },
             "Rocket with given id $rocketId is already launched"
@@ -106,7 +105,7 @@ class RocketService
     public function deployRocket(string $rocketId): array
     {
         return $this->updateRocketStatus(
-            function() use ($rocketId) {
+            function () use ($rocketId) {
                 return $this->httpClient->put("rocket/$rocketId/status/deployed");
             },
             "Rocket with given id $rocketId is already deployed"
@@ -121,7 +120,7 @@ class RocketService
     public function cancelRocket(string $rocketId): array
     {
         return $this->updateRocketStatus(
-            function() use ($rocketId) {
+            function () use ($rocketId) {
                 return $this->httpClient->delete("rocket/$rocketId/status/launched");
             },
             "Rocket with given id $rocketId is not launched yet"

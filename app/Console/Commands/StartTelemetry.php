@@ -33,8 +33,11 @@ class StartTelemetry extends Command
             $this->info("Running command: {$command}");
             // Using shell_exec instead of Artisan::call intentionally
             $output = shell_exec($command);
+            $this->info("Restarting the command since it's exceeding the memory limit");
 
+            $this->warn('Logs from telemetry:listen started');
             $this->info($output);
+            $this->warn('Logs from telemetry:listen ended');
         }
     }
 }

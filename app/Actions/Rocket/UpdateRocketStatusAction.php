@@ -15,10 +15,7 @@ class UpdateRocketStatusAction
     /**
      * Handles the update of rocket status.
      *
-     * @param string $rocketId
-     * @param RocketStatusEnum $rocketStatus
      *
-     * @return array
      *
      * @throws RocketNotFoundException
      * @throws Throwable
@@ -47,10 +44,7 @@ class UpdateRocketStatusAction
     /**
      * Updates the rocket status based on the provided status.
      *
-     * @param array $rocket
-     * @param RocketStatusEnum $rocketStatus
      *
-     * @return array
      *
      * @throws RocketStatusNotUpdatedException
      * @throws InvalidActionOnRocketException
@@ -61,14 +55,17 @@ class UpdateRocketStatusAction
         switch ($rocketStatus) {
             case RocketStatusEnum::LAUNCHED:
                 self::checkCurrentStatus($rocket, RocketStatusEnum::LAUNCHED);
+
                 return RocketService::launchRocket($rocket['id']);
 
             case RocketStatusEnum::DEPLOYED:
                 self::checkCurrentStatus($rocket, RocketStatusEnum::DEPLOYED);
+
                 return RocketService::deployRocket($rocket['id']);
 
             case RocketStatusEnum::CANCELLED:
                 self::checkCurrentStatus($rocket, RocketStatusEnum::CANCELLED);
+
                 return RocketService::cancelRocket($rocket['id']);
 
             default:
@@ -79,10 +76,7 @@ class UpdateRocketStatusAction
     /**
      * Checks the current status of the rocket.
      *
-     * @param array $rocket
-     * @param RocketStatusEnum $expectedStatus
      *
-     * @return void
      *
      * @throws RocketStatusNotUpdatedException
      */

@@ -13,53 +13,21 @@ use React\Socket\ConnectorInterface;
 
 class ListenTelemetry extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
-    protected $signature = 'telemetry:listen
-                            {--memory= : Memory limit in MB for the command to stop and exit}';
+    protected $signature = 'telemetry:listen {--memory= : Memory limit in MB for the command to stop and exit}';
 
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
     protected $description = 'Connects to multiple telemetry TCP servers and processes incoming data, push back to websocket';
 
-    /**
-     * The Connector instance.
-     */
     private ConnectorInterface $tcpConnector;
 
-    /**
-     * The connection instances.
-     *
-     * @var array<string, ConnectionInterface>
-     */
-    private array $connections;
+    private array $connections = [];
 
-    /**
-     * Over allow memory usage? If this is true, command will stop reconnecting and exit
-     */
     private bool $isOverAllowedMemory = false;
 
-    /**
-     * Allowed memory for this command to run.
-     */
-    private int $allowMemoryInBytes = 50;
+    private int $allowMemoryInBytes = 50 * 1024 * 1024;
 
-    /**
-     * Execute the console command.
-     */
     public function handle(): void
     {
-        if ($this->option('memory')) {
-            $this->allowMemoryInBytes = $this->option('memory') * 1024 * 1024;
-            $this->info('Memory limit set to '.$this->option('memory').' MB');
-        }
-
+        $this->initializeMemoryLimit();
         $eventLoop = Loop::get();
         $this->tcpConnector = new Connector($eventLoop);
 
@@ -67,68 +35,69 @@ class ListenTelemetry extends Command
             $this->connectToServer($address);
         }
 
-        // Check for allow memory usage, exit the command if exceeds
-        if ($this->allowMemoryInBytes) {
-            $eventLoop->addPeriodicTimer(5, function () {
-                $this->checkMemoryUsage();
-            });
-        }
-
+        $this->monitorMemoryUsage($eventLoop);
         $eventLoop->run();
     }
 
-    /**
-     * Connect to a TCP server.
-     */
+    private function initializeMemoryLimit(): void
+    {
+        if ($memoryLimit = $this->option('memory')) {
+            $this->allowMemoryInBytes = $memoryLimit * 1024 * 1024;
+            $this->info("Memory limit set to $memoryLimit MB");
+        }
+    }
+
     private function connectToServer(string $address): void
     {
         $this->tcpConnector->connect($address)->then(
             function (ConnectionInterface $connection) use ($address) {
-                $this->connections[$address] = $connection;
-
-                $this->info("Connected to $address");
-
-                $connection->on('data', function ($data) {
-                    $this->processPacket($data);
-                });
-
-                $connection->on('close', function () use ($address) {
-                    if (! $this->isOverAllowedMemory) {
-                        $this->info("Connection closed to $address. Reconnecting...");
-                        $this->reconnect($address);
-                    }
-                });
-
-                $connection->on('error', function (Exception $exception) use ($address) {
-
-                    $this->reconnect($address);
-                    if (! $this->isOverAllowedMemory) {
-                        $this->error('Connection error to '.$address.': '.$exception->getMessage().' Reconnecting...');
-                        $this->reconnect($address);
-                    }
-                });
+                $this->handleSuccessfulConnection($address, $connection);
             },
             function (Exception $exception) use ($address) {
-                $this->error('Connection failed to '.$address.': '.$exception->getMessage());
-                $this->reconnect($address);
+                $this->handleFailedConnection($address, $exception);
             }
         );
     }
 
-    /**
-     * Reconnect to the server with a backoff strategy.
-     */
-    private function reconnect(string $address): void
+    private function handleSuccessfulConnection(string $address, ConnectionInterface $connection): void
     {
-        $eventLoop = Loop::get();
-        $eventLoop->addTimer(5, function () use ($address) {
-            $this->connectToServer($address);
-        });
+        $this->connections[$address] = $connection;
+        $this->info("Connected to $address");
+
+        $connection->on('data', fn ($packet) => $this->processPacket($packet));
+        $connection->on('close', fn () => $this->handleConnectionClose($address));
+        $connection->on('error', fn (Exception $exception) => $this->handleConnectionError($address, $exception));
     }
 
-    /**
-     * Process a single packet.
-     */
+    private function handleFailedConnection(string $address, Exception $exception): void
+    {
+        Log::error("Connection error to $address: {$exception->getMessage()}, reconnecting...");
+        $this->error("Connection failed to $address: {$exception->getMessage()}, reconnecting ...");
+        $this->reconnect($address);
+    }
+
+    private function handleConnectionClose(string $address): void
+    {
+        if (! $this->isOverAllowedMemory) {
+            $this->info("Connection closed to $address");
+            $this->reconnect($address);
+        }
+    }
+
+    private function handleConnectionError(string $address, Exception $exception): void
+    {
+        if (! $this->isOverAllowedMemory) {
+            Log::error("Connection error to $address: {$exception->getMessage()} Reconnecting...");
+            $this->error("Connection error to $address: {$exception->getMessage()} Reconnecting...");
+            $this->reconnect($address);
+        }
+    }
+
+    private function reconnect(string $address): void
+    {
+        Loop::get()->addTimer(5, fn () => $this->connectToServer($address));
+    }
+
     private function processPacket(string $packet): void
     {
         if (strlen($packet) < 0x24) {
@@ -140,24 +109,13 @@ class ListenTelemetry extends Command
         $data = unpack('CstartByte/a10rocketID/CpacketNumber/CpacketSize/faltitude/fspeed/facceleration/fthrust/ftemperature/ncrc16/Cdelimiter', $packet);
 
         if ($this->isValidPacket($data, $packet)) {
-            RocketInformationUpdated::dispatch([
-                'id' => $data['rocketID'],
-                'altitude' => $data['altitude'],
-                'speed' => $data['speed'],
-                'acceleration' => $data['acceleration'],
-                'thrust' => $data['thrust'],
-                'temperature' => $data['temperature'],
-                'last_updated' => now()->toIso8601String(),
-            ]);
+            RocketInformationUpdated::dispatch($this->mapPacketData($data));
         } else {
             Log::error('Received invalid packet from Telemetry Server');
             Log::error(implode(', ', $data));
         }
     }
 
-    /**
-     * Validate the packet data.
-     */
     private function isValidPacket(array $data, string $packet): bool
     {
         $crcData = substr($packet, 0, 0x21);
@@ -165,53 +123,72 @@ class ListenTelemetry extends Command
 
         return $data['startByte'] === 0x82
             && $data['packetNumber'] > 0 && $data['packetNumber'] <= 0xFF
-            && is_float($data['altitude']) && ! is_nan($data['altitude'])
-            && is_float($data['speed']) && ! is_nan($data['speed'])
-            && is_float($data['acceleration']) && ! is_nan($data['acceleration'])
-            && is_float($data['thrust']) && ! is_nan($data['thrust'])
-            && is_float($data['temperature']) && ! is_nan($data['temperature'])
+            && $this->isValidFloat($data['altitude'])
+            && $this->isValidFloat($data['speed'])
+            && $this->isValidFloat($data['acceleration'])
+            && $this->isValidFloat($data['thrust'])
+            && $this->isValidFloat($data['temperature'])
             && $calculatedCRC === $data['crc16']
             && $data['delimiter'] === 0x80;
     }
 
-    /**
-     * Calculate CRC16/BUYPASS for the given data.
-     */
+    private function isValidFloat($value): bool
+    {
+        return is_float($value) && ! is_nan($value);
+    }
+
     private function calculateCRC16(string $data): int
     {
         $crc = 0;
-        for ($i = 0; $i < strlen($data); $i++) {
+        for ($i = 0, $len = strlen($data); $i < $len; $i++) {
             $crc ^= ord($data[$i]) << 8;
             for ($j = 0; $j < 8; $j++) {
-                if ($crc & 0x8000) {
-                    $crc = ($crc << 1) ^ 0x8005;
-                } else {
-                    $crc = $crc << 1;
-                }
+                $crc = ($crc & 0x8000) ? ($crc << 1) ^ 0x8005 : $crc << 1;
             }
         }
 
         return $crc & 0xFFFF;
     }
 
-    /**
-     * Check memory usage and log if it's too high.
-     */
+    private function mapPacketData(array $data): array
+    {
+        return [
+            'id' => $data['rocketID'],
+            'altitude' => $data['altitude'],
+            'speed' => $data['speed'],
+            'acceleration' => $data['acceleration'],
+            'thrust' => $data['thrust'],
+            'temperature' => $data['temperature'],
+            'last_updated' => now()->toIso8601String(),
+        ];
+    }
+
+    private function monitorMemoryUsage($eventLoop): void
+    {
+        if ($this->allowMemoryInBytes) {
+            $eventLoop->addPeriodicTimer(5, function () {
+                $this->checkMemoryUsage();
+            });
+        }
+    }
+
     private function checkMemoryUsage(): void
     {
         $memoryUsage = memory_get_usage(true);
-        $this->info('Memory usage: '.($memoryUsage / 1024 / 1024).' MB');
+
         if ($memoryUsage > $this->allowMemoryInBytes) {
             $this->isOverAllowedMemory = true;
+            $this->info('Memory usage is above allowed memory: '.($memoryUsage / 1024 / 1024).' MB and the command will close all connections');
+            $this->closeAllConnections();
+            exit(99); // Special exit code for memory limit exceeded
+        }
+    }
 
-            $this->info('Memory usage is above allowed memory: '.($memoryUsage / 1024 / 1024).' MB');
-            foreach ($this->connections as $address => $connection) {
-                $connection->close();
-                $this->info("Closing connection to $address");
-            }
-
-            // Special exit code for memory limit exceeded
-            exit(99);
+    private function closeAllConnections(): void
+    {
+        foreach ($this->connections as $address => $connection) {
+            $connection->close();
+            $this->info("Closing connection to $address");
         }
     }
 }
