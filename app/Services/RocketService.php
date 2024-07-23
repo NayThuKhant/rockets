@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\InvalidActionOnRocketException;
 use App\Exceptions\RocketServiceFailedException;
+use App\Exceptions\RocketStatusNotUpdatedException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
@@ -39,18 +40,23 @@ class RocketService
                     return $response->json();
                 }
 
+                // We will try again if only the response status is 503
+                if ($response->status() !== Response::HTTP_SERVICE_UNAVAILABLE) {
+                    break;
+                }
+
                 $triedCount++;
             }
 
-            throw new RocketServiceFailedException(__METHOD__.' failed with status code '.$response->status());
+            throw new RocketServiceFailedException(__METHOD__ . ' failed with status code ' . $response->status());
         } catch (ConnectionException $exception) {
-            throw new RocketServiceFailedException(__METHOD__.' failed with error '.$exception->getMessage());
+            throw new RocketServiceFailedException(__METHOD__ . ' failed with error ' . $exception->getMessage());
         }
     }
 
     /**
      * @throws RocketServiceFailedException
-     * @throws InvalidActionOnRocketException
+     * @throws RocketStatusNotUpdatedException
      */
     public function launchRocket(string $rocketId)
     {
@@ -61,18 +67,18 @@ class RocketService
                 return $response->json();
             } elseif ($response->status() === Response::HTTP_NOT_MODIFIED) {
                 // Rocket server responds 403 if the rocket is already launched
-                throw new InvalidActionOnRocketException("Rocket with given id $rocketId is already launched");
+                throw new RocketStatusNotUpdatedException("Rocket with given id $rocketId is already launched");
             }
 
-            throw new RocketServiceFailedException(__METHOD__.' failed with status code '.$response->status());
+            throw new RocketServiceFailedException(__METHOD__ . ' failed with status code ' . $response->status());
         } catch (ConnectionException $exception) {
-            throw new RocketServiceFailedException(__METHOD__.' failed with error '.$exception->getMessage());
+            throw new RocketServiceFailedException(__METHOD__ . ' failed with error ' . $exception->getMessage());
         }
     }
 
     /**
-     * @throws InvalidActionOnRocketException
      * @throws RocketServiceFailedException
+     * @throws RocketStatusNotUpdatedException
      */
     public function deployRocket(string $rocketId)
     {
@@ -83,12 +89,12 @@ class RocketService
                 return $response->json();
             } elseif ($response->status() === Response::HTTP_NOT_MODIFIED) {
                 // Rocket server responds 403 if the rocket is already deployed
-                throw new InvalidActionOnRocketException("Rocket with given id $rocketId is already deployed");
+                throw new RocketStatusNotUpdatedException("Rocket with given id $rocketId is already deployed");
             }
 
-            throw new RocketServiceFailedException(__METHOD__.' failed with status code '.$response->status());
+            throw new RocketServiceFailedException(__METHOD__ . ' failed with status code ' . $response->status());
         } catch (ConnectionException $exception) {
-            throw new RocketServiceFailedException(__METHOD__.' failed with error '.$exception->getMessage());
+            throw new RocketServiceFailedException(__METHOD__ . ' failed with error ' . $exception->getMessage());
         }
     }
 
@@ -108,9 +114,9 @@ class RocketService
                 throw new InvalidActionOnRocketException("Rocket with given id $rocketId is not launched yet");
             }
 
-            throw new RocketServiceFailedException(__METHOD__.' failed with status code '.$response->status());
+            throw new RocketServiceFailedException(__METHOD__ . ' failed with status code ' . $response->status());
         } catch (ConnectionException $exception) {
-            throw new RocketServiceFailedException(__METHOD__.' failed with error '.$exception->getMessage());
+            throw new RocketServiceFailedException(__METHOD__ . ' failed with error ' . $exception->getMessage());
         }
     }
 
@@ -132,9 +138,9 @@ class RocketService
                 $triedCount++;
             }
 
-            throw new RocketServiceFailedException(__METHOD__.' failed with status code '.$response->status());
+            throw new RocketServiceFailedException(__METHOD__ . ' failed with status code ' . $response->status());
         } catch (ConnectionException $exception) {
-            throw new RocketServiceFailedException(__METHOD__.' failed with error '.$exception->getMessage());
+            throw new RocketServiceFailedException(__METHOD__ . ' failed with error ' . $exception->getMessage());
         }
     }
 }
