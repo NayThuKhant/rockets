@@ -1,6 +1,8 @@
 # Rockets
 <img src="./docs/rockets.png" alt="Rockets">
 
+# Workflow
+<img src="./docs/workflow.png" alt="Rockets">
 
 ### Installation
 ```bash
@@ -38,8 +40,7 @@ VITE_BASE_URL=${APP_URL}/api# API service provided by Larvel, You may want to ta
 
 ### Running the application (Must be in root path of the application)
 ```bash
-
-docker compose up -d # Start telemetry services
+docker compose up -d # Start telemetry services (HTTP & TCP servers)
 
 php artisan optimize
 
