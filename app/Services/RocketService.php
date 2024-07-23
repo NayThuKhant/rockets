@@ -64,7 +64,7 @@ class RocketService
      * @throws RocketStatusNotUpdatedException
      * @throws InvalidActionOnRocketException
      */
-    private function updateRocketStatus(callable $request, string $errorMessage): array
+    private function updateRocketStatus(callable $request, string $errorMessageOnUnmodifiedAndInvalid): array
     {
         try {
             $response = $request();
@@ -72,9 +72,9 @@ class RocketService
             if ($response->successful()) {
                 return $response->json();
             } elseif ($response->status() === Response::HTTP_NOT_MODIFIED) {
-                throw new RocketStatusNotUpdatedException($errorMessage);
+                throw new RocketStatusNotUpdatedException($errorMessageOnUnmodifiedAndInvalid);
             } elseif ($response->badRequest()) {
-                throw new InvalidActionOnRocketException($errorMessage);
+                throw new InvalidActionOnRocketException($errorMessageOnUnmodifiedAndInvalid);
             }
 
             throw new RocketServiceFailedException(__METHOD__ . ' failed with status code ' . $response->status());
