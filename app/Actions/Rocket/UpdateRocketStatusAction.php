@@ -13,55 +13,83 @@ use Throwable;
 class UpdateRocketStatusAction
 {
     /**
+     * Handles the update of rocket status.
+     *
+     * @param int $rocketId
+     * @param RocketStatusEnum $rocketStatus
+     *
+     * @return array
+     *
      * @throws RocketNotFoundException
      * @throws Throwable
      */
-    public static function handle($rocketId, RocketStatusEnum $rocketStatus): array
+    public static function handle(int $rocketId, RocketStatusEnum $rocketStatus): array
     {
         $rockets = RocketService::getRockets();
-        $rocket = collect($rockets)->where('id', $rocketId)->first();
+        $rocket = collect($rockets)->firstWhere('id', $rocketId);
 
-        // Rocket is not found on rocket server
-        throw_unless($rocket, new RocketNotFoundException());
+        throw_unless($rocket, new RocketNotFoundException('Rocket not found.'));
 
         try {
-            switch ($rocketStatus) {
-                case RocketStatusEnum::LAUNCHED:
-                    throw_if($rocket['status'] === RocketStatusEnum::LAUNCHED->value,
-                        new RocketStatusNotUpdatedException('Rocket is already launched'));
-
-                    $updatedRocket = RocketService::launchRocket($rocketId);
-                    break;
-
-                case RocketStatusEnum::DEPLOYED:
-                    throw_if($rocket['status'] === RocketStatusEnum::DEPLOYED->value,
-                        new RocketStatusNotUpdatedException('Rocket is already deployed'));
-
-                    $updatedRocket = RocketService::deployRocket($rocketId);
-                    break;
-
-                case RocketStatusEnum::CANCELLED:
-                    throw_if($rocket['status'] === RocketStatusEnum::CANCELLED->value,
-                        new RocketStatusNotUpdatedException('Rocket is already cancelled'));
-
-                    $updatedRocket = RocketService::cancelRocket($rocketId);
-                    break;
-
-                default:
-                    throw new InvalidActionOnRocketException('Given action cannot be applied for rocket');
-            }
+            $updatedRocket = self::updateRocketStatus($rocket, $rocketStatus);
         } catch (RocketStatusNotUpdatedException $exception) {
-            // When there is an invalid action on rocket, the response should be original rocket value
-            // This is optional, and to provide smooth user experience and to mention that resource has an update that is not applied yet
-
-            // We may also add some flag to mention that the server is updated
-            // I don't use 304 here, just to make sure that the client receives the updates from server
+            // Client may not have the latest data from server and tries to update this
+            // Return original rocket data if the status was not updated
+            // For better UX
             $updatedRocket = $rocket;
         }
-
 
         RocketInformationUpdated::dispatch($updatedRocket);
 
         return $updatedRocket;
+    }
+
+    /**
+     * Updates the rocket status based on the provided status.
+     *
+     * @param array $rocket
+     * @param RocketStatusEnum $rocketStatus
+     *
+     * @return array
+     *
+     * @throws RocketStatusNotUpdatedException
+     * @throws InvalidActionOnRocketException
+     * @throws Throwable
+     */
+    private static function updateRocketStatus(array $rocket, RocketStatusEnum $rocketStatus): array
+    {
+        switch ($rocketStatus) {
+            case RocketStatusEnum::LAUNCHED:
+                self::checkCurrentStatus($rocket, RocketStatusEnum::LAUNCHED);
+                return RocketService::launchRocket($rocket['id']);
+
+            case RocketStatusEnum::DEPLOYED:
+                self::checkCurrentStatus($rocket, RocketStatusEnum::DEPLOYED);
+                return RocketService::deployRocket($rocket['id']);
+
+            case RocketStatusEnum::CANCELLED:
+                self::checkCurrentStatus($rocket, RocketStatusEnum::CANCELLED);
+                return RocketService::cancelRocket($rocket['id']);
+
+            default:
+                throw new InvalidActionOnRocketException('Given action cannot be applied to rocket.');
+        }
+    }
+
+    /**
+     * Checks the current status of the rocket.
+     *
+     * @param array $rocket
+     * @param RocketStatusEnum $expectedStatus
+     *
+     * @return void
+     *
+     * @throws RocketStatusNotUpdatedException
+     */
+    private static function checkCurrentStatus(array $rocket, RocketStatusEnum $expectedStatus): void
+    {
+        if ($rocket['status'] === $expectedStatus->value) {
+            throw new RocketStatusNotUpdatedException("Rocket is already {$expectedStatus->value}.");
+        }
     }
 }

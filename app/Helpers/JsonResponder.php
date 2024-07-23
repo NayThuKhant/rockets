@@ -19,11 +19,6 @@ class JsonResponder
         ], Response::HTTP_NOT_FOUND);
     }
 
-    public static function notModified(): JsonResponse
-    {
-        return response()->json([], Response::HTTP_NOT_MODIFIED);
-    }
-
     public static function internalServerError($message): JsonResponse
     {
         return response()->json([
