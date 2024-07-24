@@ -27,6 +27,7 @@ class ListenWeather extends Command
      */
     public function handle(): void
     {
+        $this->info("Listening weather information from Rocket Core Service with pid of ". getmypid());
         while (true) {
             // We will send only successful http response to the websocket
             try {
