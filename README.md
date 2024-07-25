@@ -11,6 +11,7 @@ cd rockets
 cp .env.example .env
 composer install
 php artisan key:generate
+php artisan migrate # We do not use the database, but just to keep it as the framework's default
 npm install
 npm run build
 ```
@@ -38,15 +39,18 @@ VITE_REVERB_SCHEME=${REVERB_SCHEME}
 VITE_BASE_URL=${APP_URL}/api# API service provided by Larvel, You may want to take a look at APP_URL in .env file
 ```
 
-### Running the application (Must be in root path of the application)
+### Running the application
+
+
 ```bash
-docker compose up -d # Start telemetry services (HTTP & TCP servers)
+  # This command must be run where the docker compose file is located
+  docker compose up -d # Start telemetry services (HTTP & TCP servers)
+```
 
-php artisan optimize
-
-# Run the following commands in different terminals
+```bash
+# Run the following commands in different terminals, under Laravel Application Root
 php artisan serve
-php artisan reverb:start
+php artisan reverb:start # Important, without this, telemetry:start and weather:listen wont work
 php artisan telemetry:start
 php artisan weather:listen
 ```
