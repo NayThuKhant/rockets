@@ -54,3 +54,12 @@ php artisan reverb:start # Important, without this, telemetry:start and weather:
 php artisan telemetry:start
 php artisan weather:listen
 ```
+
+### Testing
+
+```
+# Restart docker containers to set the initial state of rockets (I use actual http instead of Http faking)
+docker compose restart
+
+php artisan test # This may take long since I'm using actual http test)
+```
